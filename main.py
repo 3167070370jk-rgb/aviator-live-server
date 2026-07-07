@@ -1,4 +1,4 @@
-import asyncio
+ import asyncio
 import json
 import websockets
 from fastapi import FastAPI
@@ -21,19 +21,31 @@ live_mult = 0.0
 current_round = None
 ws_status = "disconnected"
 
-WS_TOKEN = os.environ.get("WS_TOKEN", "")
-WS_BASE  = os.environ.get("WS_BASE", "wss://crashbot.grupoaviatorcolombia.com/api/v1/ws/live?ticket=")
+WS_TOKEN  = os.environ.get("WS_TOKEN", "")
+WS_BASE   = os.environ.get("WS_BASE", "wss://crashbot.grupoaviatorcolombia.com/api/v1/ws/live?ticket=")
+WS_COOKIE = os.environ.get("WS_COOKIE", "")
 
 async def connect_casino():
     global live_mult, current_round, ws_status
+
     if not WS_TOKEN:
         ws_status = "no_token"
         return
+
     url = WS_BASE + WS_TOKEN
+
+    headers = {
+        "Origin": "https://crashbot.grupoaviatorcolombia.com",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+    }
+    if WS_COOKIE:
+        headers["Cookie"] = WS_COOKIE
+
     while True:
         try:
-            async with websockets.connect(url, ping_interval=20) as ws:
+            async with websockets.connect(url, ping_interval=20, extra_headers=headers) as ws:
                 ws_status = "connected"
+                print("[WS] Conectado ✅")
                 async for message in ws:
                     try:
                         msg = json.loads(message)
@@ -42,6 +54,7 @@ async def connect_casino():
                         pass
         except Exception as e:
             ws_status = "reconnecting"
+            print(f"[WS] Error: {e}. Reconectando en 5s...")
             await asyncio.sleep(5)
 
 async def handle_message(msg):
@@ -55,6 +68,7 @@ async def handle_message(msg):
         results.insert(0, {"odd": v, "date": ts, "round_id": msg.get("game_round_id")})
         if len(results) > 500:
             results.pop()
+        print(f"[Ronda] {v}x")
     if msg.get("type") == "live_state" and msg.get("state") == 1:
         live_mult = 1.0
         current_round = msg.get("round_id")
